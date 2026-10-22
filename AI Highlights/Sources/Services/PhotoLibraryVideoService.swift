@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import Photos
-import UIKit
 
 struct PhotoVideoSnapshot: Sendable {
     let localIdentifier: String
@@ -52,23 +51,6 @@ private final class PhotoRequestCancellation: @unchecked Sendable {
         resultHandler: @escaping (AVAsset?, AVAudioMix?, [AnyHashable: Any]?) -> Void
     ) {
         let requestID = manager.requestAVAsset(forVideo: asset, options: options, resultHandler: resultHandler)
-        install(requestID)
-    }
-
-    func requestImage(
-        for asset: PHAsset,
-        targetSize: CGSize,
-        contentMode: PHImageContentMode,
-        options: PHImageRequestOptions,
-        resultHandler: @escaping (UIImage?, [AnyHashable: Any]?) -> Void
-    ) {
-        let requestID = manager.requestImage(
-            for: asset,
-            targetSize: targetSize,
-            contentMode: contentMode,
-            options: options,
-            resultHandler: resultHandler
-        )
         install(requestID)
     }
 
@@ -136,38 +118,6 @@ enum PhotoLibraryVideoService {
             height: asset.pixelHeight,
             modificationDate: asset.modificationDate
         )
-    }
-
-    static func thumbnail(localIdentifier: String, targetSize: CGSize) async throws -> UIImage {
-        try Task.checkCancellation()
-        let photo = try await fetchVideo(localIdentifier: localIdentifier)
-        try Task.checkCancellation()
-        let options = PHImageRequestOptions()
-        options.version = .current
-        options.deliveryMode = .fastFormat
-        options.resizeMode = .fast
-        options.isNetworkAccessAllowed = false
-        let request = PhotoRequestCancellation()
-        let image = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<UIImage, Error>) in
-                request.requestImage(for: photo, targetSize: targetSize, contentMode: .aspectFill, options: options) { image, info in
-                    let wasCancelled = request.complete()
-                    if wasCancelled || info?[PHImageCancelledKey] as? Bool == true {
-                        continuation.resume(throwing: CancellationError())
-                    } else if let error = info?[PHImageErrorKey] as? Error {
-                        continuation.resume(throwing: error)
-                    } else if let image {
-                        continuation.resume(returning: image)
-                    } else {
-                        continuation.resume(throwing: VideoSourceError.photoVideoUnavailable)
-                    }
-                }
-            }
-        } onCancel: {
-            request.cancel()
-        }
-        try Task.checkCancellation()
-        return image
     }
 
     static func asset(localIdentifier: String, networkAccessAllowed: Bool = true) async throws -> AVAsset {

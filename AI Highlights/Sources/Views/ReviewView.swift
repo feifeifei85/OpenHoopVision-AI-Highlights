@@ -282,7 +282,7 @@ struct ReviewView: View {
                 }
             } label: {
                 HStack(spacing: 11) {
-                    VideoThumbnailView(videoSource: model.videoSource(for: project), allowsGeneration: allowsThumbnails, timestamp: range.start, width: 84, height: 44)
+                    VideoThumbnailView(videoSource: model.videoSource(for: project), allowsGeneration: allowsThumbnails, timestamp: candidate.eventTime, width: 84, height: 44)
                         .overlay {
                             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                                 .font(.system(size: 13, weight: .bold))

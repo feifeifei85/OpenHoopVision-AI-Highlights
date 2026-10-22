@@ -197,6 +197,15 @@ private struct LibraryVideoCard: View {
             if let job {
                 ProgressView(value: progressFraction).tint(.hoopOrange).frame(height: 2)
                 HStack(spacing: 9) {
+                    if job.status == .running {
+                        HStack(spacing: 4) {
+                            Image(systemName: "basketball.fill")
+                                .accessibilityHidden(true)
+                            Text("×\(performance?.detectedGoals ?? 0)")
+                        }
+                        .foregroundStyle(Color.hoopOrange)
+                        Text("·").foregroundStyle(Color.hoopMuted)
+                    }
                     Text(statusSummary(job, fraction: progressFraction, performance: performance))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(job.status == .ready ? Color.hoopMint : Color.hoopMuted)

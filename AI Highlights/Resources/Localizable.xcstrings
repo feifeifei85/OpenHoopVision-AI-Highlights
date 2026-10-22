@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "·" : {
+
+    },
     "%.1f s" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -43,16 +46,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · 進球集錦"
-          }
-        }
-      }
-    },
-    "%@/%@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@/%2$@"
           }
         }
       }
@@ -106,6 +99,9 @@
     "%lld/%@, %@ FPS" : {
       "extractionState" : "manual",
       "shouldTranslate" : false
+    },
+    "×%lld" : {
+
     },
     "Action incomplete" : {
       "extractionState" : "manual",
@@ -272,6 +268,33 @@
       "extractionState" : "manual",
       "shouldTranslate" : false
     },
+    "AI Highlights · %@" : {
+      "extractionState" : "manual",
+      "shouldTranslate" : false
+    },
+    "AI Highlights logo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Highlights logo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Highlights 标志"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Highlights 標誌"
+          }
+        }
+      }
+    },
     "AI video analysis" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -360,29 +383,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允許存取照片圖庫，以直接使用影片而不複製原片。"
-          }
-        }
-      }
-    },
-    "Analysis paused" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paused"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已暂停"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已暫停"
           }
         }
       }
@@ -502,6 +502,29 @@
         }
       }
     },
+    "Analysis paused" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paused"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暫停"
+          }
+        }
+      }
+    },
     "Analyze Again" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -521,75 +544,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新分析"
-          }
-        }
-      }
-    },
-    "Continue Analysis" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue Analysis"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续分析"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "繼續分析"
-          }
-        }
-      }
-    },
-    "Completed in %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Completed in %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用时 %@"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "耗时 %@"
-          }
-        }
-      }
-    },
-    "Continuing analysis" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continuing analysis"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续分析"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "繼續分析"
           }
         }
       }
@@ -801,6 +755,29 @@
         }
       }
     },
+    "Clear all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear all"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消全选"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消全選"
+          }
+        }
+      }
+    },
     "Clips not found. Please analyze the video again." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -847,6 +824,29 @@
         }
       }
     },
+    "Completed in %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed in %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用时 %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耗时 %@"
+          }
+        }
+      }
+    },
     "Confidence: Highest First" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -866,6 +866,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "信心值由高到低"
+          }
+        }
+      }
+    },
+    "Continue Analysis" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue Analysis"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续分析"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繼續分析"
+          }
+        }
+      }
+    },
+    "Continuing analysis" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuing analysis"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续分析"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繼續分析"
           }
         }
       }
@@ -937,14 +983,6 @@
             "value" : "製作集錦"
           }
         }
-      }
-    },
-    "Clear all" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear all" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消全选" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取消全選" } }
       }
     },
     "Create Shot Highlights" : {
@@ -1062,6 +1100,29 @@
         }
       }
     },
+    "Deselect all clips" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deselect all clips"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消选择所有片段"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消選擇所有片段"
+          }
+        }
+      }
+    },
     "Deselect highlight %lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1083,14 +1144,6 @@
             "value" : "取消選擇高光 %lld"
           }
         }
-      }
-    },
-    "Deselect all clips" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deselect all clips" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消选择所有片段" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "取消選擇所有片段" } }
       }
     },
     "Detection Help" : {
@@ -1188,25 +1241,70 @@
     "Download" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Download" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "下載" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載"
+          }
+        }
       }
     },
     "Download selected highlights" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Download selected highlights" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载所选高光片段" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "下載所選高光片段" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download selected highlights"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载所选高光片段"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載所選高光片段"
+          }
+        }
       }
     },
     "Downloading…" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Downloading…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载中…" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "下載中…" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloading…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载中…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載中…"
+          }
+        }
       }
     },
     "English" : {
@@ -2290,33 +2388,6 @@
         }
       }
     },
-    "AI Highlights · %@" : {
-      "extractionState" : "manual",
-      "shouldTranslate" : false
-    },
-    "AI Highlights logo" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI Highlights logo"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI Highlights 标志"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI Highlights 標誌"
-          }
-        }
-      }
-    },
     "Opening selected video" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2386,29 +2457,6 @@
         }
       }
     },
-    "Peak %@ · Threshold %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Peak %@ · Threshold %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最高 %@ · 阈值 %@"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最高 %@ · 閾值 %@"
-          }
-        }
-      }
-    },
     "Pause Analysis" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2428,6 +2476,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暫停分析"
+          }
+        }
+      }
+    },
+    "Peak %@ · Threshold %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peak %@ · Threshold %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高 %@ · 阈值 %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高 %@ · 閾值 %@"
           }
         }
       }
@@ -2915,6 +2986,29 @@
         }
       }
     },
+    "Saved to Photos" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved to Photos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存到照片图库"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已儲存到照片圖庫"
+          }
+        }
+      }
+    },
     "Saved to your photo library." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2936,14 +3030,6 @@
             "value" : "已儲存到照片圖庫。"
           }
         }
-      }
-    },
-    "Saved to Photos" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved to Photos" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已保存到照片图库" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已儲存到照片圖庫" } }
       }
     },
     "Saving…" : {
@@ -2992,6 +3078,52 @@
         }
       }
     },
+    "Select all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select all"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全选"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全選"
+          }
+        }
+      }
+    },
+    "Select all clips" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select all clips"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择所有片段"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇所有片段"
+          }
+        }
+      }
+    },
     "Select at least one shot clip to create highlights." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3036,22 +3168,6 @@
             "value" : "選擇片段"
           }
         }
-      }
-    },
-    "Select all" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select all" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全选" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "全選" } }
-      }
-    },
-    "Select all clips" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select all clips" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择所有片段" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇所有片段" } }
       }
     },
     "Select highlight %lld" : {
@@ -3126,9 +3242,24 @@
     "Selected: %lld" : {
       "extractionState" : "manual",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected: %lld" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已选 %lld 段" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已選 %lld 段" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected: %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选 %lld 段"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已選 %lld 段"
+          }
+        }
       }
     },
     "Settings" : {
@@ -3523,14 +3654,6 @@
         }
       }
     },
-    "Unable to Download Highlights" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to Download Highlights" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法下载高光片段" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法下載高光片段" } }
-      }
-    },
     "Unable to create the highlight timeline." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3573,6 +3696,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法刪除高光"
+          }
+        }
+      }
+    },
+    "Unable to Download Highlights" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to Download Highlights"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法下载高光片段"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法下載高光片段"
           }
         }
       }

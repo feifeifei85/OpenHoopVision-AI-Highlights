@@ -49,20 +49,21 @@ actor VideoThumbnailStore {
         if let image = cachedImage(for: source, at: seconds) { return image }
         try Task.checkCancellation()
 
-        if case .photoLibrary(let localIdentifier) = source {
-            let image = try await PhotoLibraryVideoService.thumbnail(
-                localIdentifier: localIdentifier,
-                targetSize: CGSize(width: 320, height: 240)
-            )
-            try Task.checkCancellation()
-            cache(image, key: Self.photoCacheKey(localIdentifier, at: seconds))
-            return image
+        let asset: AVAsset
+        let destination: URL?
+        let cacheKey: String
+        switch source {
+        case .appFile(let videoURL):
+            asset = AVURLAsset(url: videoURL)
+            let url = Self.cacheURL(for: videoURL, at: seconds)
+            destination = url
+            cacheKey = url.absoluteString
+        case .photoLibrary(let localIdentifier):
+            asset = try await PhotoLibraryVideoService.asset(localIdentifier: localIdentifier, networkAccessAllowed: false)
+            destination = nil
+            cacheKey = Self.photoCacheKey(localIdentifier, at: seconds)
         }
 
-        guard case .appFile(let videoURL) = source else { throw VideoSourceError.photoVideoUnavailable }
-        let asset = AVURLAsset(url: videoURL)
-        let destination = Self.cacheURL(for: videoURL, at: seconds)
-        let cacheKey = destination.absoluteString
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 320, height: 240)
@@ -74,11 +75,13 @@ actor VideoThumbnailStore {
         try Task.checkCancellation()
         let image = UIImage(cgImage: result.image)
 
-        // Deletion or cancellation may happen while AVFoundation is decoding.
-        guard FileManager.default.fileExists(atPath: videoURL.path) else { throw CancellationError() }
-        if let data = image.jpegData(compressionQuality: 0.85) {
-            try? FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: destination, options: .atomic)
+        if let destination, case .appFile(let videoURL) = source {
+            // Deletion or cancellation may happen while AVFoundation is decoding.
+            guard FileManager.default.fileExists(atPath: videoURL.path) else { throw CancellationError() }
+            if let data = image.jpegData(compressionQuality: 0.85) {
+                try? FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: destination, options: .atomic)
+            }
         }
         cache(image, key: cacheKey)
         return image
