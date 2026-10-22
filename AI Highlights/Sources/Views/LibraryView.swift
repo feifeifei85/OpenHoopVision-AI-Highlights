@@ -27,7 +27,8 @@ struct LibraryView: View {
                             SwipeToDeleteRow(id: video.id, revealedRow: $revealedRow, onRetry: {
                                 revealedRow = nil
                                 model.restartAnalysis(videoID: video.id)
-                            }, onDelete: { revealedRow = nil; deleteVideo(video) }) {
+                            }, onDelete: { revealedRow = nil; deleteVideo(video) },
+                                retryLabel: String(localized: "Analyze video again", bundle: AppLanguage.current.bundle), retrySymbol: "arrow.clockwise") {
                                 LibraryVideoCard(video: video,
                                     onOpen: { open { onOpenVideo(video) } })
                             }
@@ -180,7 +181,11 @@ private struct LibraryVideoCard: View {
 
     var body: some View {
         let job = model.analysisJobs[video.id]
+        let canContinue = model.canContinueAnalysis(videoID: video.id)
         let progress = model.analysisProgress[video.id]?.snapshot
+        let performance = progress?.performance ?? job?.performance
+        let isComplete = job?.status == .ready || job?.status == .empty
+        let progressFraction = isComplete ? 1 : min(1, max(0, progress?.fraction ?? job?.fraction ?? 0))
         let allowsThumbnailGeneration = !model.hasActiveAnalyses || job?.status.isActive == true
         return VStack(alignment: .leading, spacing: 13) {
             Button(action: onOpen) {
@@ -190,62 +195,53 @@ private struct LibraryVideoCard: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("library.video.\(video.id)")
             if let job {
-                Divider().overlay(Color.hoopStroke)
-                if job.status.isActive {
-                    HStack(spacing: 8) {
-                        if job.status == .queued { ProgressView().controlSize(.small).tint(.hoopOrange) }
-                        Text(job.status == .running ? (progress?.performance.map { String(localized: "Goals detected: \($0.detectedGoals)", bundle: AppLanguage.current.bundle) } ?? progress?.message ?? job.message) : String(localized: "Waiting for analysis", bundle: AppLanguage.current.bundle))
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer(minLength: 0)
-                        if job.status == .running { Text(verbatim: (progress?.fraction ?? job.fraction).formatted(.percent.precision(.fractionLength(0)).locale(AppLanguage.current.locale))).monospacedDigit() }
-                        Button { model.cancelAnalysis(videoID: video.id) } label: {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 21)).foregroundStyle(Color.hoopMuted)
+                ProgressView(value: progressFraction).tint(.hoopOrange).frame(height: 2)
+                HStack(spacing: 9) {
+                    Text(statusSummary(job, fraction: progressFraction, performance: performance))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(job.status == .ready ? Color.hoopMint : Color.hoopMuted)
+                        .lineLimit(1).minimumScaleFactor(0.65).monospacedDigit()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if job.status == .running {
+                        analysisIconButton(symbol: "pause.fill",
+                                           label: String(localized: "Pause Analysis", bundle: AppLanguage.current.bundle)) {
+                            model.cancelAnalysis(videoID: video.id)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(String(localized: "Cancel Analysis", bundle: AppLanguage.current.bundle))
                         .accessibilityIdentifier("analysis.cancel.\(video.id)")
-                    }
-                    .font(.system(size: 11))
-                    ProgressView(value: progress?.fraction ?? job.fraction).tint(.hoopOrange)
-                    if let performance = progress?.performance ?? job.performance {
-                        HStack(spacing: 4) {
-                            Text("\(mediaTime(performance.processedVideoTime))/\(mediaTime(performance.totalVideoDuration))")
-                            Spacer(minLength: 2)
-                            Text(fps(performance.framesPerSecond))
-                            Text(String(localized: "ETA \(eta(performance.estimatedRemainingSeconds))", bundle: AppLanguage.current.bundle))
+                    } else if job.status == .queued {
+                        analysisIconButton(symbol: "xmark.circle.fill",
+                                           label: String(localized: "Cancel Analysis", bundle: AppLanguage.current.bundle),
+                                           tint: Color.hoopMuted) {
+                            model.cancelAnalysis(videoID: video.id)
                         }
-                        .font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.hoopMuted)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                } else {
-                    HStack(spacing: 9) {
-                        Text(statusText(job)).font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(job.status == .ready ? Color.hoopMint : Color.hoopMuted)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
-                        if job.status == .ready {
-                            Button(String(localized: "Select Clips", bundle: AppLanguage.current.bundle)) { onOpen() }
-                        } else if job.status == .empty {
-                            Button(String(localized: "Adjust Threshold", bundle: AppLanguage.current.bundle)) {
-                                thresholdValue = (job.threshold * 100).rounded()
-                                isShowingThresholdPrompt = true
-                            }
-                        } else {
-                            Button(String(localized: "Analyze Again", bundle: AppLanguage.current.bundle)) { model.restartAnalysis(videoID: video.id) }
+                        .accessibilityIdentifier("analysis.cancel.\(video.id)")
+                    } else if job.status == .ready {
+                        Button(String(localized: "Select Clips", bundle: AppLanguage.current.bundle)) { onOpen() }
+                    } else if job.status == .empty {
+                        Button(String(localized: "Adjust Threshold", bundle: AppLanguage.current.bundle)) {
+                            thresholdValue = (job.threshold * 100).rounded()
+                            isShowingThresholdPrompt = true
                         }
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .buttonStyle(.plain).foregroundStyle(Color.hoopOrange)
-                    if job.status == .empty, let result = job.result {
-                        Text(String(localized: "Peak \(result.highestConfidence.formatted(.percent.precision(.fractionLength(1)))) · Threshold \(result.confidenceThreshold.formatted(.percent))", bundle: AppLanguage.current.bundle))
-                            .font(.system(size: 10)).foregroundStyle(Color.hoopMuted)
+                    } else {
+                        let actionLabel = canContinue
+                            ? String(localized: "Continue Analysis", bundle: AppLanguage.current.bundle)
+                            : String(localized: "Analyze Again", bundle: AppLanguage.current.bundle)
+                        analysisIconButton(symbol: canContinue ? "play.fill" : "arrow.clockwise",
+                                           label: actionLabel) {
+                            if canContinue { model.continueAnalysis(videoID: video.id) }
+                            else { model.restartAnalysis(videoID: video.id) }
+                        }
                     }
                 }
+                .font(.system(size: 12, weight: .semibold))
+                .buttonStyle(.plain).foregroundStyle(Color.hoopOrange)
+                .frame(height: 36)
             }
         }
         .padding(13).cardSurface()
         .contextMenu {
             if job?.status.isActive == true { Button(String(localized: "Cancel Analysis", bundle: AppLanguage.current.bundle), systemImage: "xmark.circle") { model.cancelAnalysis(videoID: video.id) } }
+            else if canContinue { Button(String(localized: "Continue Analysis", bundle: AppLanguage.current.bundle), systemImage: "play.fill") { model.continueAnalysis(videoID: video.id) } }
             else { Button(String(localized: "Analyze Again", bundle: AppLanguage.current.bundle), systemImage: "arrow.clockwise") { model.restartAnalysis(videoID: video.id) } }
         }
         .sheet(isPresented: $isShowingThresholdPrompt) {
@@ -256,29 +252,56 @@ private struct LibraryVideoCard: View {
     private func statusText(_ job: VideoAnalysisJob) -> String {
         switch job.status {
         case .ready: return String(localized: "Highlights found: \(job.candidateCount)", bundle: AppLanguage.current.bundle)
-        case .empty: return String(localized: "Analysis complete. No shots found.", bundle: AppLanguage.current.bundle)
+        case .empty:
+            let message = String(localized: "Analysis complete. No shots found.", bundle: AppLanguage.current.bundle)
+            guard let result = job.result else { return message }
+            let details = String(localized: "Peak \(result.highestConfidence.formatted(.percent.precision(.fractionLength(1)))) · Threshold \(result.confidenceThreshold.formatted(.percent))", bundle: AppLanguage.current.bundle)
+            return "\(message) · \(details)"
         case .failed: return job.errorMessage ?? String(localized: "Analysis failed", bundle: AppLanguage.current.bundle)
-        case .cancelled: return String(localized: "Analysis cancelled", bundle: AppLanguage.current.bundle)
+        case .cancelled: return String(localized: "Analysis paused", bundle: AppLanguage.current.bundle)
         case .interrupted: return String(localized: "Analysis interrupted", bundle: AppLanguage.current.bundle)
         case .queued: return String(localized: "Waiting for analysis", bundle: AppLanguage.current.bundle)
-        case .running: return job.message
+        case .running: return String(localized: "Analyzing Game Video", bundle: AppLanguage.current.bundle)
         }
     }
 
-    private func mediaTime(_ seconds: TimeInterval?) -> String {
-        guard let seconds, seconds.isFinite else { return "00:00:00" }
-        let value = Int(min(max(0, seconds.rounded(.down)), 359_999))
-        return String(format: "%02d:%02d:%02d", value / 3600, value / 60 % 60, value % 60)
+    private func statusSummary(_ job: VideoAnalysisJob, fraction: Double, performance: AnalysisPerformance?) -> String {
+        let isComplete = job.status == .ready || job.status == .empty
+        let percentage = fraction.formatted(.percent.precision(.fractionLength(0)).locale(AppLanguage.current.locale))
+        var summary = job.status == .running ? percentage : "\(statusText(job)) · \(percentage)"
+        let totalDuration = isComplete ? job.result?.duration ?? video.duration : performance?.totalVideoDuration ?? video.duration
+        if !isComplete, let totalDuration, totalDuration.isFinite, totalDuration > 0 {
+            let processedTime = performance?.processedVideoTime ?? 0
+            let safeProcessedTime = processedTime.isFinite ? min(max(0, processedTime), totalDuration) : 0
+            summary += " · \(safeProcessedTime.highlightDuration) / \(totalDuration.highlightDuration)"
+        }
+        if job.status == .running, let framesPerSecond = performance?.framesPerSecond,
+           framesPerSecond.isFinite, framesPerSecond > 0 {
+            summary += " · \(framesPerSecond.formatted(.number.precision(.fractionLength(0)).locale(AppLanguage.current.locale))) FPS"
+        }
+        if job.status == .running,
+           let remainingSeconds = performance?.estimatedRemainingSeconds(after: job.accumulatedElapsedSeconds ?? 0),
+           remainingSeconds.isFinite {
+            summary += " · \(String(localized: "ETA \(remainingSeconds.highlightDuration)", bundle: AppLanguage.current.bundle))"
+        }
+        if isComplete {
+            let elapsedSeconds = job.accumulatedElapsedSeconds ?? performance?.elapsedSeconds
+            if let elapsedSeconds, elapsedSeconds.isFinite, elapsedSeconds >= 0 {
+                summary += " · \(String(localized: "Completed in \(elapsedSeconds.highlightDuration)", bundle: AppLanguage.current.bundle))"
+            }
+        }
+        return summary
     }
 
-    private func eta(_ seconds: TimeInterval?) -> String {
-        guard let seconds, seconds.isFinite else { return "--:--:--" }
-        return mediaTime(seconds)
-    }
-
-    private func fps(_ value: Double?) -> String {
-        guard let value, value.isFinite else { return "— FPS" }
-        return String(format: "%.1f FPS", value)
+    private func analysisIconButton(symbol: String, label: String, tint: Color = .hoopOrange,
+                                    action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint).frame(width: 36, height: 36)
+                .background(Color.hoopElevated, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private func applyThreshold() {

@@ -29,6 +29,7 @@ final class VideoFrameReader: @unchecked Sendable {
     private let output: AVAssetReaderTrackOutput
     private let transform: CGAffineTransform
     private let sourceFrameRate: Double?
+    private let sourceFrameIndexOffset: Int
     private let softwareRendering: Bool
     private let execution: AnalysisExecutionPolicy?
     private let backgroundContext = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
@@ -46,6 +47,11 @@ final class VideoFrameReader: @unchecked Sendable {
         output.alwaysCopiesSampleData = false
         self.transform = transform
         self.sourceFrameRate = sourceFrameRate
+        if let timeRange, let sourceFrameRate, sourceFrameRate.isFinite, sourceFrameRate > 0 {
+            sourceFrameIndexOffset = Int(max(0, (timeRange.start.seconds * sourceFrameRate).rounded(.up)))
+        } else {
+            sourceFrameIndexOffset = 0
+        }
         self.softwareRendering = softwareRendering
         self.execution = execution
         guard reader.canAdd(output) else { throw VideoAnalysisError.unreadableVideo }
@@ -96,7 +102,7 @@ final class VideoFrameReader: @unchecked Sendable {
         defer { reader.cancelReading() }
         let context = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: softwareRendering])
         do {
-            var sourceIndex = 0
+            var sourceIndex = sourceFrameIndexOffset
             while true {
                 condition.lock()
                 while pending != nil && !cancelled { condition.wait() }

@@ -38,6 +38,7 @@ final class AppModel {
     @ObservationIgnored private let analysisService = VideoAnalysisService()
     @ObservationIgnored private let compositionService = VideoCompositionService()
     @ObservationIgnored private var pendingAnalyses: [String] = []
+    @ObservationIgnored private var restartAfterCancellation: Set<String> = []
     @ObservationIgnored private var analysisRunner: Task<Void, Never>?
     @ObservationIgnored private var currentAnalysis: Task<VideoAnalysisResult, Error>?
     @ObservationIgnored private var runningVideoID: String?
@@ -66,13 +67,18 @@ final class AppModel {
         let analysesLoad = repository.loadAnalyses()
         var loadedJobs = analysesLoad.value
         var didMigratePhotoJobs = false
+        var invalidatedCheckpointFiles: [String] = []
         for video in storedVideos where video.photoAssetIdentifier != nil {
             guard var job = loadedJobs[video.id],
                   job.photoAssetVersion != PhotoLibraryVideoService.currentVersionIdentifier else { continue }
+            if let checkpointFileName = job.checkpointFileName {
+                invalidatedCheckpointFiles.append(checkpointFileName)
+            }
             job.result = nil
             job.performance = nil
             job.fraction = 0
             job.forceRescan = true
+            job.checkpointFileName = nil
             job.photoAssetVersion = PhotoLibraryVideoService.currentVersionIdentifier
             job.errorMessage = nil
             job.status = .interrupted
@@ -86,6 +92,7 @@ final class AppModel {
         if didMigratePhotoJobs {
             do {
                 try repository.saveAnalyses(loadedJobs)
+                invalidatedCheckpointFiles.forEach { repository.removeAnalysisCheckpoint(fileName: $0) }
             } catch {
                 self.analysisPersistenceErrorMessage = error.localizedDescription
             }
@@ -97,16 +104,33 @@ final class AppModel {
     func startAnalysis(for video: LibraryVideo, forceRescan: Bool = false, threshold: Double? = nil) {
         guard analysisJobs[video.id]?.status.isActive != true else { return }
         let previousJob = analysisJobs[video.id]
+        let previousCheckpoint = previousJob?.checkpointFileName
+        let canResume = !forceRescan && previousCheckpoint != nil
+        let newCheckpointFileName = "\(UUID().uuidString).jsonl"
+        let checkpointFileName = canResume ? (previousCheckpoint ?? newCheckpointFileName) : newCheckpointFileName
+        let effectiveThreshold = threshold ?? (canResume ? previousJob?.threshold : nil) ?? confidenceThreshold
         var job = VideoAnalysisJob(
             id: video.id, status: .queued, inputSize: .fixed1280x736,
-            threshold: AnalysisSettings.normalizedThreshold(threshold ?? confidenceThreshold)
+            threshold: AnalysisSettings.normalizedThreshold(effectiveThreshold)
         )
         job.modelVersion = BasketballModel.version
         job.photoAssetVersion = video.photoAssetIdentifier == nil ? nil : PhotoLibraryVideoService.currentVersionIdentifier
         job.forceRescan = forceRescan || previousJob?.forceRescan == true
         job.manualCandidates = previousJob?.manualCandidates
+        job.checkpointFileName = checkpointFileName
+        job.accumulatedElapsedSeconds = canResume
+            ? previousJob?.accumulatedElapsedSeconds ?? previousJob?.performance?.elapsedSeconds ?? 0
+            : 0
+        if previousCheckpoint == checkpointFileName {
+            job.fraction = previousJob?.fraction ?? 0
+            job.message = String(localized: "Continuing analysis", bundle: AppLanguage.current.bundle)
+        }
         analysisJobs[video.id] = job
-        analysisProgress[video.id] = AnalysisJobProgress()
+        let progress = AnalysisJobProgress()
+        if previousCheckpoint == checkpointFileName {
+            progress.snapshot = AnalysisJobProgressSnapshot(fraction: job.fraction, message: job.message)
+        }
+        analysisProgress[video.id] = progress
         pendingAnalyses.append(video.id)
         if hasBackgroundSession { backgroundBatchVideoIDs.insert(video.id) }
         guard persistAnalyses() else {
@@ -115,15 +139,42 @@ final class AppModel {
             analysisJobs[video.id] = previousJob
             return
         }
+        if previousCheckpoint != checkpointFileName {
+            repository.removeAnalysisCheckpoint(fileName: previousCheckpoint)
+        }
         ensureBackgroundSession()
     }
 
     func restartAnalysis(videoID: String) {
         guard !isExporting, let video = videos.first(where: { $0.id == videoID }) else { return }
+        if analysisJobs[videoID]?.status.isActive == true {
+            if runningVideoID == videoID {
+                restartAfterCancellation.insert(videoID)
+                cancelAnalysis(videoID: videoID)
+                return
+            }
+            cancelAnalysis(videoID: videoID)
+        }
+        let previousCheckpoint = analysisJobs[videoID]?.checkpointFileName
         let threshold = analysisJobs[videoID]?.threshold ?? confidenceThreshold
-        cancelAnalysis(videoID: videoID)
         if draft?.sourceFileName == video.fileName { discardDraft() }
         startAnalysis(for: video, forceRescan: true, threshold: threshold)
+        if analysisJobs[videoID]?.checkpointFileName != previousCheckpoint {
+            repository.removeAnalysisCheckpoint(fileName: previousCheckpoint)
+        }
+    }
+
+    func continueAnalysis(videoID: String) {
+        guard !isExporting, analysisJobs[videoID]?.status.isActive != true,
+              let video = videos.first(where: { $0.id == videoID }) else { return }
+        let threshold = analysisJobs[videoID]?.threshold ?? confidenceThreshold
+        if draft?.sourceFileName == video.fileName { discardDraft() }
+        startAnalysis(for: video, threshold: threshold)
+    }
+
+    func canContinueAnalysis(videoID: String) -> Bool {
+        guard let job = analysisJobs[videoID], !job.status.isActive else { return false }
+        return job.checkpointFileName != nil
     }
 
     private func ensureBackgroundSession() {
@@ -154,10 +205,10 @@ final class AppModel {
     func cancelAnalysis(videoID: String) {
         guard analysisJobs[videoID]?.status.isActive == true else { return }
         pendingAnalyses.removeAll { $0 == videoID }
-        commitProgress(for: videoID)
+        commitProgress(for: videoID, preserveCheckpoint: true)
         if var job = analysisJobs[videoID] {
             job.status = .cancelled
-            job.message = String(localized: "Analysis cancelled", bundle: AppLanguage.current.bundle)
+            job.message = String(localized: "Analysis paused", bundle: AppLanguage.current.bundle)
             analysisJobs[videoID] = job
         }
         if runningVideoID == videoID { currentAnalysis?.cancel() }
@@ -203,9 +254,47 @@ final class AppModel {
                 analysisProgress[id]?.snapshot.message = String(localized: "Loading model", bundle: AppLanguage.current.bundle)
                 persistAnalyses()
                 let source = videoSource(for: video)
+                let checkpointFileName = job.checkpointFileName
+                var resumeHits: [AnalysisHit] = []
+                if let checkpointFileName {
+                    let checkpointRepository = repository
+                    do {
+                        resumeHits = try await Task.detached(priority: .utility) {
+                            try checkpointRepository.loadAnalysisCheckpoint(fileName: checkpointFileName)
+                        }.value
+                    } catch {
+                        analysisPersistenceErrorMessage = error.localizedDescription
+                    }
+                }
+                guard analysisJobs[id]?.status == .running else {
+                    runningVideoID = nil
+                    if restartAfterCancellation.remove(id) != nil {
+                        restartAnalysis(videoID: id)
+                    }
+                    continue
+                }
                 currentAnalysis = Task(priority: .userInitiated) { [self] in
                     try await self.analysisService.analyze(source: source, confidenceThreshold: job.threshold,
-                        execution: execution, reuseCachedScan: job.forceRescan != true) { [weak self] fraction, message, performance in
+                        execution: execution, reuseCachedScan: job.forceRescan != true && resumeHits.isEmpty,
+                        resumeHits: resumeHits,
+                        checkpoint: { [weak self] batch in
+                            guard let self, let checkpointFileName,
+                                  var checkpointJob = self.analysisJobs[id],
+                                  checkpointJob.checkpointFileName == checkpointFileName else { return false }
+                            do {
+                                try self.repository.appendAnalysisCheckpoint(batch.hits, fileName: checkpointFileName)
+                                checkpointJob.fraction = batch.progressFraction
+                                checkpointJob.performance = batch.performance
+                                checkpointJob.message = String(localized: "Goals detected: \(batch.performance.detectedGoals)", bundle: AppLanguage.current.bundle)
+                                self.analysisJobs[id] = checkpointJob
+                                self.persistAnalyses()
+                                return true
+                            } catch {
+                                self.analysisPersistenceErrorMessage = error.localizedDescription
+                                return false
+                            }
+                        },
+                        progress: { [weak self] fraction, message, performance in
                             guard let self, self.analysisJobs[id]?.status == .running,
                                   let progress = self.analysisProgress[id] else { return }
                             progress.snapshot = AnalysisJobProgressSnapshot(
@@ -213,18 +302,19 @@ final class AppModel {
                             )
                             AnalysisBackgroundController.shared.update(completedJobs: self.completedInBatch,
                                 remainingJobs: self.pendingAnalyses.count + 1, fraction: fraction, message: message)
-                            // Progress is live-only: relaunch marks active jobs interrupted, rather than resuming frames.
-                            // Queue/start/finish/cancel and user edits still persist atomic checkpoints.
-                        }
+                        })
                 }
+                var completedCheckpointFileName: String?
                 do {
                     let result = applyingDefaultClipSelection(to: try await currentAnalysis!.value)
                     updateVideoMetadata(sourceKey: id, metadata: result.metadata)
                     commitProgress(for: id)
                     if var completedJob = analysisJobs[id], completedJob.status == .running {
+                        completedCheckpointFileName = completedJob.checkpointFileName
                         completedJob.result = result
                         completedJob.fraction = 1
                         completedJob.forceRescan = false
+                        completedJob.checkpointFileName = nil
                         let count = completedJob.candidateCount
                         completedJob.status = count == 0 ? .empty : .ready
                         completedJob.message = count == 0 ? String(localized: "Analysis complete. No highlights found.", bundle: AppLanguage.current.bundle) : String(localized: "Highlights found: \(count)", bundle: AppLanguage.current.bundle)
@@ -233,7 +323,7 @@ final class AppModel {
                 } catch is CancellationError {
                     // A cancelled item must never make the OS report this batch as completed.
                     if analysisJobs[id]?.status == .running {
-                        commitProgress(for: id)
+                        commitProgress(for: id, preserveCheckpoint: true)
                         if var job = analysisJobs[id] {
                             job.status = .cancelled
                             analysisJobs[id] = job
@@ -241,7 +331,7 @@ final class AppModel {
                     }
                 } catch {
                     if analysisJobs[id]?.status == .running {
-                        commitProgress(for: id)
+                        commitProgress(for: id, preserveCheckpoint: true)
                         if var job = analysisJobs[id] {
                             job.status = .failed
                             job.errorMessage = error.localizedDescription
@@ -251,8 +341,13 @@ final class AppModel {
                 }
                 currentAnalysis = nil
                 runningVideoID = nil
+                if restartAfterCancellation.remove(id) != nil {
+                    restartAnalysis(videoID: id)
+                }
                 completedInBatch += 1
-                persistAnalyses()
+                if persistAnalyses() {
+                    repository.removeAnalysisCheckpoint(fileName: completedCheckpointFileName)
+                }
             }
             analysisRunner = nil
             let shouldFinishBackgroundTask = hasBackgroundSession
@@ -272,7 +367,7 @@ final class AppModel {
     private func interruptAnalyses() {
         currentAnalysis?.cancel()
         for id in pendingAnalyses + [runningVideoID].compactMap({ $0 }) where analysisJobs[id]?.status.isActive == true {
-            commitProgress(for: id)
+            commitProgress(for: id, preserveCheckpoint: true)
             if var job = analysisJobs[id] {
                 job.status = .interrupted
                 job.message = String(localized: "Analysis interrupted. You can start again.", bundle: AppLanguage.current.bundle)
@@ -299,12 +394,18 @@ final class AppModel {
         }
     }
 
-    private func commitProgress(for videoID: String) {
+    private func commitProgress(for videoID: String, preserveCheckpoint: Bool = false) {
         guard let progress = analysisProgress.removeValue(forKey: videoID),
               var job = analysisJobs[videoID] else { return }
-        job.fraction = progress.snapshot.fraction
-        job.message = progress.snapshot.message
-        job.performance = progress.snapshot.performance
+        if !preserveCheckpoint || job.checkpointFileName == nil {
+            job.fraction = progress.snapshot.fraction
+            job.message = progress.snapshot.message
+            job.performance = progress.snapshot.performance
+        }
+        if let elapsedSeconds = progress.snapshot.performance?.elapsedSeconds,
+           elapsedSeconds.isFinite, elapsedSeconds > 0 {
+            job.accumulatedElapsedSeconds = (job.accumulatedElapsedSeconds ?? 0) + elapsedSeconds
+        }
         analysisJobs[videoID] = job
     }
 
@@ -437,10 +538,12 @@ final class AppModel {
             cancelAnalysis(videoID: videoID)
         }
         guard var job = analysisJobs[videoID] else { return }
+        let checkpointFileName = job.checkpointFileName
         job.result = nil
         job.performance = nil
         job.fraction = 0
         job.forceRescan = true
+        job.checkpointFileName = nil
         job.photoAssetVersion = PhotoLibraryVideoService.currentVersionIdentifier
         job.errorMessage = nil
         job.status = .interrupted
@@ -448,7 +551,7 @@ final class AppModel {
         var updatedJobs = analysisJobs
         updatedJobs[videoID] = job
         analysisJobs = updatedJobs
-        persistAnalyses()
+        if persistAnalyses() { repository.removeAnalysisCheckpoint(fileName: checkpointFileName) }
         if draft?.sourceFileName == videoID { draft = nil }
     }
 
@@ -734,11 +837,12 @@ final class AppModel {
     func deleteVideo(_ video: LibraryVideo) throws {
         guard !isExporting else { throw CompositionError.exportInProgress }
         cancelAnalysis(videoID: video.id)
+        let checkpointFileName = analysisJobs[video.id]?.checkpointFileName
         let remaining = videos.filter { $0.id != video.id }
         try repository.deleteVideo(video, remainingVideos: remaining)
         videos = remaining
         analysisJobs.removeValue(forKey: video.id)
-        persistAnalyses()
+        if persistAnalyses() { repository.removeAnalysisCheckpoint(fileName: checkpointFileName) }
         if draft?.sourceFileName == video.fileName { draft = nil }
         if activeVideo?.sourceKey == video.fileName { activeVideo = nil }
     }

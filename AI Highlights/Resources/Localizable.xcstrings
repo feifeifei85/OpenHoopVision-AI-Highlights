@@ -364,25 +364,25 @@
         }
       }
     },
-    "Analysis cancelled" : {
+    "Analysis paused" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Analysis cancelled"
+            "value" : "Paused"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已取消分析"
+            "value" : "已暂停"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已取消分析"
+            "value" : "已暫停"
           }
         }
       }
@@ -485,19 +485,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Analysis interrupted. You can start again."
+            "value" : "Analysis interrupted. Continue from the last saved point."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "分析已中断，可重新开始"
+            "value" : "分析已中断，可从上次保存的位置继续"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "分析已中斷，可重新開始"
+            "value" : "分析已中斷，可從上次儲存的位置繼續"
           }
         }
       }
@@ -521,6 +521,75 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新分析"
+          }
+        }
+      }
+    },
+    "Continue Analysis" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue Analysis"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续分析"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繼續分析"
+          }
+        }
+      }
+    },
+    "Completed in %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed in %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用时 %@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "耗时 %@"
+          }
+        }
+      }
+    },
+    "Continuing analysis" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuing analysis"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续分析"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繼續分析"
           }
         }
       }
@@ -2336,6 +2405,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最高 %@ · 閾值 %@"
+          }
+        }
+      }
+    },
+    "Pause Analysis" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause Analysis"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停分析"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暫停分析"
           }
         }
       }

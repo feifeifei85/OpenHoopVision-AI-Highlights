@@ -5,20 +5,22 @@ import Foundation
 typealias AnalysisProgressHandler = @MainActor @Sendable (
     _ fraction: Double, _ message: String, _ performance: AnalysisPerformance?
 ) -> Void
+typealias AnalysisCheckpointHandler = @MainActor @Sendable (AnalysisCheckpointBatch) async -> Bool
 
 actor VideoAnalysisService {
     private let hitMergeGap: TimeInterval = 0.9
     private var cachedScan: CompletedScan?
 
-    func analyze(videoURL: URL, confidenceThreshold: Double = AnalysisSettings.defaultThreshold, execution: AnalysisExecutionPolicy? = nil, reuseCachedScan: Bool = true, progress: @escaping AnalysisProgressHandler) async throws -> VideoAnalysisResult {
+    func analyze(videoURL: URL, confidenceThreshold: Double = AnalysisSettings.defaultThreshold, execution: AnalysisExecutionPolicy? = nil, reuseCachedScan: Bool = true, resumeHits: [AnalysisHit] = [], checkpoint: @escaping AnalysisCheckpointHandler = { _ in true }, progress: @escaping AnalysisProgressHandler) async throws -> VideoAnalysisResult {
         try await analyze(source: .appFile(videoURL), confidenceThreshold: confidenceThreshold,
-                          execution: execution, reuseCachedScan: reuseCachedScan, progress: progress)
+                          execution: execution, reuseCachedScan: reuseCachedScan,
+                          resumeHits: resumeHits, checkpoint: checkpoint, progress: progress)
     }
 
-    func analyze(source: VideoSourceReference, confidenceThreshold: Double = AnalysisSettings.defaultThreshold, execution: AnalysisExecutionPolicy? = nil, reuseCachedScan: Bool = true, progress: @escaping AnalysisProgressHandler) async throws -> VideoAnalysisResult {
+    func analyze(source: VideoSourceReference, confidenceThreshold: Double = AnalysisSettings.defaultThreshold, execution: AnalysisExecutionPolicy? = nil, reuseCachedScan: Bool = true, resumeHits: [AnalysisHit] = [], checkpoint: @escaping AnalysisCheckpointHandler = { _ in true }, progress: @escaping AnalysisProgressHandler) async throws -> VideoAnalysisResult {
         let threshold = AnalysisSettings.normalizedThreshold(confidenceThreshold)
         let identity = try VideoIdentity(source: source)
-        if reuseCachedScan, let scan = cachedScan, scan.identity == identity {
+        if resumeHits.isEmpty, reuseCachedScan, let scan = cachedScan, scan.identity == identity {
             try Task.checkCancellation()
             let result = makeResult(scan: scan, threshold: threshold)
             let performance = AnalysisPerformance(
@@ -29,9 +31,12 @@ actor VideoAnalysisService {
             await progress(1, String(localized: "\(scan.scores.count) frames reused · Shot candidates: \(result.candidates.count)", bundle: AppLanguage.current.bundle), performance)
             return result
         }
-        await progress(0.02, String(localized: "Opening selected video", bundle: AppLanguage.current.bundle), nil)
+        if resumeHits.isEmpty {
+            await progress(0.02, String(localized: "Opening selected video", bundle: AppLanguage.current.bundle), nil)
+        }
         let asset = try await source.avAsset()
-        let duration = try await asset.load(.duration).seconds
+        let assetDuration = try await asset.load(.duration)
+        let duration = assetDuration.seconds
         guard duration.isFinite, duration > 0 else { throw VideoAnalysisError.unreadableVideo }
 
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
@@ -43,25 +48,46 @@ actor VideoAnalysisService {
         let sourceFrameRate = nominalFrameRate.isFinite && nominalFrameRate > 0 ? Double(nominalFrameRate) : nil
         let metadata = VideoMetadata.from(naturalSize: naturalSize, preferredTransform: transform,
                                           frameRate: sourceFrameRate)
-        await progress(0.03, String(localized: "Loading the basketball Core ML model", bundle: AppLanguage.current.bundle), nil)
+        var scores = resumeHits.filter { $0.time.isFinite && $0.confidence.isFinite && $0.time >= 0 && $0.time <= duration }
+            .sorted { $0.time < $1.time }
+        let resumeAfterTime = scores.last?.time
+        if scores.isEmpty {
+            await progress(0.03, String(localized: "Loading the basketball Core ML model", bundle: AppLanguage.current.bundle), nil)
+        }
         var detector = execution?.isBackground == true ? nil : try CoreMLBasketballDetector(useGpu: true)
         let backgroundDetector: CoreMLBasketballDetector?
         if execution == nil { backgroundDetector = nil }
         // The current signing profile has no Background GPU or Background Inference entitlement.
         // Keep the fast all-units model for foreground use and pre-load a CPU-only model for background use.
         else { backgroundDetector = try CoreMLBasketballDetector(useGpu: false) }
-        let frames = try VideoFrameReader(asset: asset, track: track, transform: transform,
-                                          sourceFrameRate: sourceFrameRate, execution: execution)
-        defer { frames.cancel() }
-        var scores: [AnalysisHit] = []
-        var processedFrames = 0
+        let readerStart = resumeAfterTime.map { CMTime(seconds: $0 + 0.001, preferredTimescale: 600) }
+        let timeRange: CMTimeRange? = readerStart.flatMap { start in
+            guard CMTimeCompare(start, assetDuration) < 0 else { return nil }
+            return CMTimeRange(start: start, duration: CMTimeSubtract(assetDuration, start))
+        }
+        let hasReachedEnd = resumeAfterTime != nil && timeRange == nil
+        let frames: VideoFrameReader?
+        if hasReachedEnd {
+            frames = nil
+        } else {
+            frames = try VideoFrameReader(asset: asset, track: track, transform: transform,
+                sourceFrameRate: sourceFrameRate, execution: execution, timeRange: timeRange)
+        }
+        defer { frames?.cancel() }
+        var processedFrames = scores.count
         var backgroundFrames = 0
-        var highestConfidence = 0.0
+        var highestConfidence = scores.map(\.confidence).max() ?? 0
         var detectedGoals = 0
         var lastHitTime: TimeInterval?
+        for hit in scores where hit.confidence >= threshold {
+            if lastHitTime.map({ hit.time - $0 > hitMergeGap }) ?? true { detectedGoals += 1 }
+            lastHitTime = hit.time
+        }
         let processingStart = ProcessInfo.processInfo.systemUptime
         var lastProgressUpdate = processingStart
-        var fpsSamples: [(uptime: TimeInterval, frames: Int)] = [(processingStart, 0)]
+        var lastCheckpointTime = processingStart
+        var fpsSamples: [(uptime: TimeInterval, frames: Int)] = [(processingStart, processedFrames)]
+        var pendingCheckpointHits: [AnalysisHit] = []
 
         func recentFPS(at uptime: TimeInterval, processedFrames: Int) -> Double? {
             fpsSamples.append((uptime, processedFrames))
@@ -76,67 +102,96 @@ actor VideoAnalysisService {
             return rate.isFinite && rate > 0 ? rate : nil
         }
 
-        await progress(0.04, String(localized: "Goals detected: 0", bundle: AppLanguage.current.bundle), AnalysisPerformance(
-            processedFrames: 0, elapsedSeconds: 0, videoFraction: 0,
-            processedVideoTime: 0, totalVideoDuration: duration
-        ))
-        while true {
-            guard let frame = try frames.next() else { break }
-            try Task.checkCancellation()
-            let timestamp = frame.timestamp
-            guard timestamp.isFinite else { throw VideoAnalysisError.unreadableVideo }
-            if detector == nil, execution?.isBackground != true {
-                detector = try CoreMLBasketballDetector(useGpu: true)
-            }
-            var usedBackground = false
-            let confidence = try autoreleasepool {
-                func detect(background: Bool) throws -> Double {
-                    if background, let backgroundDetector {
-                        usedBackground = true
-                        return try backgroundDetector.ballInBasketConfidence(in: frames.backgroundImage(for: frame))
-                    }
-                    guard let detector else { throw DetectorError.missingModel }
-                    do { return try detector.ballInBasketConfidence(in: frame.image) }
-                    catch {
-                        guard let backgroundDetector else { throw error }
-                        usedBackground = true
-                        return try backgroundDetector.ballInBasketConfidence(in: frames.backgroundImage(for: frame))
-                    }
+        let initialVideoTime = resumeAfterTime ?? 0
+        let initialVideoFraction = min(1, max(0, initialVideoTime / duration))
+        await progress(0.04 + 0.92 * initialVideoFraction,
+            String(localized: "Goals detected: \(detectedGoals)", bundle: AppLanguage.current.bundle),
+            AnalysisPerformance(processedFrames: processedFrames, elapsedSeconds: 0,
+                videoFraction: initialVideoFraction, detectedGoals: detectedGoals,
+                processedVideoTime: initialVideoTime, totalVideoDuration: duration))
+
+        func flushCheckpoint() async {
+            guard !pendingCheckpointHits.isEmpty, let lastHit = pendingCheckpointHits.last else { return }
+            let processedVideoTime = min(duration, max(0, lastHit.time))
+            let videoFraction = min(1, max(0, processedVideoTime / duration))
+            let performance = AnalysisPerformance(processedFrames: processedFrames,
+                elapsedSeconds: ProcessInfo.processInfo.systemUptime - processingStart,
+                videoFraction: videoFraction, detectedGoals: detectedGoals,
+                backgroundFrames: backgroundFrames, processedVideoTime: processedVideoTime,
+                totalVideoDuration: duration)
+            let saved = await checkpoint(AnalysisCheckpointBatch(hits: pendingCheckpointHits,
+                progressFraction: 0.04 + 0.92 * videoFraction, performance: performance))
+            if saved { pendingCheckpointHits.removeAll(keepingCapacity: true) }
+            lastCheckpointTime = ProcessInfo.processInfo.systemUptime
+        }
+
+        do {
+            while let frameReader = frames, let frame = try frameReader.next() {
+                try Task.checkCancellation()
+                let timestamp = frame.timestamp
+                guard timestamp.isFinite else { throw VideoAnalysisError.unreadableVideo }
+                if let resumeAfterTime, timestamp <= resumeAfterTime { continue }
+                if detector == nil, execution?.isBackground != true {
+                    detector = try CoreMLBasketballDetector(useGpu: true)
                 }
-                if let execution { return try execution.withFrameAccess { try detect(background: $0) } }
-                return try detect(background: false)
-            }
-            processedFrames += 1
-            if usedBackground { backgroundFrames += 1 }
-            highestConfidence = max(highestConfidence, confidence)
-            scores.append(AnalysisHit(time: timestamp, confidence: confidence))
-            if confidence >= threshold {
-                if lastHitTime.map({ timestamp - $0 > hitMergeGap }) ?? true { detectedGoals += 1 }
-                lastHitTime = timestamp
-            }
-            let now = ProcessInfo.processInfo.systemUptime
-            if processedFrames == 1 || now - lastProgressUpdate >= 0.5 {
-                lastProgressUpdate = now
-                let rollingFPS = recentFPS(at: now, processedFrames: processedFrames)
+                var usedBackground = false
+                let confidence = try autoreleasepool {
+                    func detect(background: Bool) throws -> Double {
+                        if background, let backgroundDetector {
+                            usedBackground = true
+                            return try backgroundDetector.ballInBasketConfidence(in: frameReader.backgroundImage(for: frame))
+                        }
+                        guard let detector else { throw DetectorError.missingModel }
+                        do { return try detector.ballInBasketConfidence(in: frame.image) }
+                        catch {
+                            guard let backgroundDetector else { throw error }
+                            usedBackground = true
+                            return try backgroundDetector.ballInBasketConfidence(in: frameReader.backgroundImage(for: frame))
+                        }
+                    }
+                    if let execution { return try execution.withFrameAccess { try detect(background: $0) } }
+                    return try detect(background: false)
+                }
+                processedFrames += 1
+                if usedBackground { backgroundFrames += 1 }
+                highestConfidence = max(highestConfidence, confidence)
+                let hit = AnalysisHit(time: timestamp, confidence: confidence)
+                scores.append(hit)
+                pendingCheckpointHits.append(hit)
+                if confidence >= threshold {
+                    if lastHitTime.map({ timestamp - $0 > hitMergeGap }) ?? true { detectedGoals += 1 }
+                    lastHitTime = timestamp
+                }
+                let now = ProcessInfo.processInfo.systemUptime
                 let frameDuration = frame.duration
                 let frameEnd = timestamp + (frameDuration.isFinite && frameDuration > 0 ? frameDuration : 0)
                 let videoFraction = min(1, max(0, frameEnd / duration))
-                let performance = AnalysisPerformance(
-                    processedFrames: processedFrames,
-                    elapsedSeconds: now - processingStart,
-                    videoFraction: videoFraction,
-                    detectedGoals: detectedGoals,
-                    backgroundFrames: backgroundFrames,
-                    processedVideoTime: min(duration, max(0, frameEnd)), totalVideoDuration: duration,
-                    recentFramesPerSecond: rollingFPS
-                )
-                await progress(
-                    0.04 + 0.92 * videoFraction,
-                    String(localized: "Goals detected: \(detectedGoals)", bundle: AppLanguage.current.bundle),
-                    performance
-                )
+                if processedFrames == 1 || now - lastProgressUpdate >= 0.5 {
+                    lastProgressUpdate = now
+                    let performance = AnalysisPerformance(
+                        processedFrames: processedFrames,
+                        elapsedSeconds: now - processingStart,
+                        videoFraction: videoFraction,
+                        detectedGoals: detectedGoals,
+                        backgroundFrames: backgroundFrames,
+                        processedVideoTime: min(duration, max(0, frameEnd)), totalVideoDuration: duration,
+                        recentFramesPerSecond: recentFPS(at: now, processedFrames: processedFrames)
+                    )
+                    await progress(
+                        0.04 + 0.92 * videoFraction,
+                        String(localized: "Goals detected: \(detectedGoals)", bundle: AppLanguage.current.bundle),
+                        performance
+                    )
+                }
+                if now - lastCheckpointTime >= 5 {
+                    await flushCheckpoint()
+                }
             }
+        } catch {
+            await flushCheckpoint()
+            throw error
         }
+        await flushCheckpoint()
         try Task.checkCancellation()
         guard processedFrames > 0 else { throw VideoAnalysisError.unreadableVideo }
 

@@ -2,9 +2,15 @@ import CoreGraphics
 import Foundation
 import Observation
 
-struct AnalysisHit: Sendable {
+struct AnalysisHit: Codable, Sendable {
     let time: TimeInterval
     let confidence: Double
+}
+
+struct AnalysisCheckpointBatch: Sendable {
+    let hits: [AnalysisHit]
+    let progressFraction: Double
+    let performance: AnalysisPerformance
 }
 
 struct VideoAnalysisResult: Codable, Sendable {
@@ -63,10 +69,12 @@ struct AnalysisPerformance: Codable, Sendable {
         return averageFramesPerSecond
     }
 
-    var estimatedRemainingSeconds: TimeInterval? {
-        guard framesPerSecond != nil, videoFraction.isFinite, videoFraction > 0 else { return nil }
+    func estimatedRemainingSeconds(after accumulatedElapsedSeconds: TimeInterval = 0) -> TimeInterval? {
+        guard framesPerSecond != nil, videoFraction.isFinite, videoFraction > 0,
+              elapsedSeconds.isFinite, elapsedSeconds >= 0,
+              accumulatedElapsedSeconds.isFinite, accumulatedElapsedSeconds >= 0 else { return nil }
         let fraction = min(1, videoFraction)
-        let remaining = elapsedSeconds * (1 - fraction) / fraction
+        let remaining = (accumulatedElapsedSeconds + elapsedSeconds) * (1 - fraction) / fraction
         return remaining.isFinite ? max(0, remaining) : nil
     }
 }
@@ -132,10 +140,12 @@ struct VideoAnalysisJob: Identifiable, Codable, Sendable {
     var fraction: Double = 0
     var message: String = String(localized: "Waiting for analysis", bundle: AppLanguage.current.bundle)
     var performance: AnalysisPerformance?
+    var accumulatedElapsedSeconds: TimeInterval? = nil
     var result: VideoAnalysisResult?
     var errorMessage: String?
     var forceRescan: Bool?
     var manualCandidates: [ShotCandidate]?
+    var checkpointFileName: String? = nil
     var modelVersion: String? = nil
     var photoAssetVersion: String? = nil
 

@@ -19,6 +19,7 @@ struct ProjectRepository: Sendable {
     private var projectsURL: URL { rootURL.appendingPathComponent("projects.json") }
     private var videosURL: URL { rootURL.appendingPathComponent("videos.json") }
     private var analysesURL: URL { rootURL.appendingPathComponent("analyses.json") }
+    private var analysisCheckpointDirectory: URL { rootURL.appendingPathComponent("Analysis Checkpoints", isDirectory: true) }
 
     func loadAnalyses() -> RepositoryLoad<[String: VideoAnalysisJob]> {
         let jobs: [String: VideoAnalysisJob]
@@ -30,12 +31,14 @@ struct ProjectRepository: Sendable {
         return RepositoryLoad(value: jobs.mapValues { job in
             var restored = job
             if restored.modelVersion != BasketballModel.version || restored.inputSize != .fixed1280x736 {
+                removeAnalysisCheckpoint(fileName: restored.checkpointFileName)
                 restored.inputSize = .fixed1280x736
                 restored.modelVersion = BasketballModel.version
                 restored.result = nil
                 restored.performance = nil
                 restored.fraction = 0
                 restored.forceRescan = true
+                restored.checkpointFileName = nil
                 restored.errorMessage = nil
                 restored.status = .interrupted
                 restored.message = String(localized: "The detection model changed. Run analysis again.", bundle: AppLanguage.current.bundle)
@@ -51,6 +54,47 @@ struct ProjectRepository: Sendable {
     func saveAnalyses(_ jobs: [String: VideoAnalysisJob]) throws {
         try createDirectories()
         try writeStore(jobs, to: analysesURL)
+    }
+
+    func appendAnalysisCheckpoint(_ hits: [AnalysisHit], fileName: String) throws {
+        guard !hits.isEmpty else { return }
+        try FileManager.default.createDirectory(at: analysisCheckpointDirectory, withIntermediateDirectories: true)
+        let url = analysisCheckpointDirectory.appendingPathComponent(fileName)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        var data = try JSONEncoder().encode(hits)
+        data.append(0x0A)
+        let file = try FileHandle(forUpdating: url)
+        defer { try? file.close() }
+        let end = try file.seekToEnd()
+        if end > 0 {
+            try file.seek(toOffset: end - 1)
+            let lastByte = try file.read(upToCount: 1)?.first
+            if lastByte != 0x0A {
+                try file.seekToEnd()
+                try file.write(contentsOf: Data([0x0A]))
+            }
+        }
+        try file.seekToEnd()
+        try file.write(contentsOf: data)
+        try file.synchronize()
+    }
+
+    func loadAnalysisCheckpoint(fileName: String) throws -> [AnalysisHit] {
+        let url = analysisCheckpointDirectory.appendingPathComponent(fileName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        let decoder = JSONDecoder()
+        return try Data(contentsOf: url).split(separator: 0x0A).flatMap { line in
+            // Ignore a trailing partial batch if the app was terminated during a write.
+            (try? decoder.decode([AnalysisHit].self, from: Data(line))) ?? []
+        }
+    }
+
+    func removeAnalysisCheckpoint(fileName: String?) {
+        guard let fileName else { return }
+        let url = analysisCheckpointDirectory.appendingPathComponent(fileName)
+        try? FileManager.default.removeItem(at: url)
     }
 
     func loadVideos() -> RepositoryLoad<[LibraryVideo]> {

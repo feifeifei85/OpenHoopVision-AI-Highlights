@@ -6,6 +6,8 @@ struct SwipeToDeleteRow<Content: View>: View {
     var onRetry: (() -> Void)? = nil
     let onDelete: () -> Void
     var deleteLabel = String(localized: "Delete Video", bundle: AppLanguage.current.bundle)
+    var retryLabel = String(localized: "Analyze video again", bundle: AppLanguage.current.bundle)
+    var retrySymbol = "arrow.clockwise"
     @ViewBuilder let content: () -> Content
     @State private var isRevealed = false
     @State private var isClosingReveal = false
@@ -19,7 +21,8 @@ struct SwipeToDeleteRow<Content: View>: View {
                         .id("card")
                     HStack(spacing: 12) {
                         if let onRetry {
-                            AnalysisRetryButton(size: 56, hitTargetSize: 68) {
+                            AnalysisRetryButton(size: 56, hitTargetSize: 68,
+                                accessibilityLabel: retryLabel, systemImage: retrySymbol) {
                                 closeReveal(using: proxy, completion: onRetry)
                             }
                                 .accessibilityIdentifier("retry.\(id)")
@@ -126,11 +129,13 @@ private struct HorizontalSwipeOffsetObserver: ViewModifier {
 struct AnalysisRetryButton: View {
     var size: CGFloat = 56
     var hitTargetSize: CGFloat = 44
+    var accessibilityLabel = String(localized: "Analyze video again", bundle: AppLanguage.current.bundle)
+    var systemImage = "arrow.clockwise"
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "arrow.clockwise")
+            Image(systemName: systemImage)
                 .font(.system(size: size * 0.39, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: size, height: size)
@@ -139,7 +144,7 @@ struct AnalysisRetryButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Analyze video again", bundle: AppLanguage.current.bundle))
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
