@@ -1,0 +1,12 @@
+.DS_Store
+.venv*/
+__pycache__/
+*.py[cod]
+DerivedData/
+build/
+*.xcresult/
+*.xcactivitylog
+*.log
+**/xcuserdata/
+*.xcuserstate
+.xcodebuildmcp/
