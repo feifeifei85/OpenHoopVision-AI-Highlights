@@ -5,6 +5,7 @@
 <p align="center">
   <a href="./README_zh.md"><img src="https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-blue?style=flat-square" alt="简体中文 README" /></a>
 </p>
+
 **TL;DR:** AI Highlights is a native iOS app derived from [OpenHoopVision](https://github.com/feifeifei85/OpenHoopVision): it finds potential made-basket moments on-device, lets users review them, and exports selected clips as MP4.
 
 ## Screenshots
