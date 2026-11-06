@@ -87,6 +87,9 @@ actor VideoAnalysisService {
         var lastProgressUpdate = processingStart
         var lastCheckpointTime = processingStart
         var fpsSamples: [(uptime: TimeInterval, frames: Int)] = [(processingStart, processedFrames)]
+        var videoRateSamples: [(uptime: TimeInterval, videoTime: TimeInterval, isBackground: Bool)] = []
+        var lastKnownFPS: Double?
+        var lastKnownVideoRate: Double?
         var pendingCheckpointHits: [AnalysisHit] = []
 
         func recentFPS(at uptime: TimeInterval, processedFrames: Int) -> Double? {
@@ -99,6 +102,23 @@ actor VideoAnalysisService {
             let interval = uptime - first.uptime
             guard interval >= 0.5 else { return nil }
             let rate = Double(processedFrames - first.frames) / interval
+            return rate.isFinite && rate > 0 ? rate : nil
+        }
+
+        func recentVideoSecondsPerSecond(at uptime: TimeInterval, videoTime: TimeInterval, isBackground: Bool) -> Double? {
+            if let last = videoRateSamples.last,
+               last.isBackground != isBackground || uptime - last.uptime > 5 {
+                videoRateSamples.removeAll(keepingCapacity: true)
+            }
+            videoRateSamples.append((uptime, videoTime, isBackground))
+            let cutoff = uptime - 5
+            while videoRateSamples.count > 2, videoRateSamples[1].uptime <= cutoff {
+                videoRateSamples.removeFirst()
+            }
+            guard let first = videoRateSamples.first else { return nil }
+            let interval = uptime - first.uptime
+            guard interval >= 1.5 else { return nil }
+            let rate = (videoTime - first.videoTime) / interval
             return rate.isFinite && rate > 0 ? rate : nil
         }
 
@@ -118,7 +138,8 @@ actor VideoAnalysisService {
                 elapsedSeconds: ProcessInfo.processInfo.systemUptime - processingStart,
                 videoFraction: videoFraction, detectedGoals: detectedGoals,
                 backgroundFrames: backgroundFrames, processedVideoTime: processedVideoTime,
-                totalVideoDuration: duration)
+                totalVideoDuration: duration, recentFramesPerSecond: lastKnownFPS,
+                recentVideoSecondsPerSecond: lastKnownVideoRate)
             let saved = await checkpoint(AnalysisCheckpointBatch(hits: pendingCheckpointHits,
                 progressFraction: 0.04 + 0.92 * videoFraction, performance: performance))
             if saved { pendingCheckpointHits.removeAll(keepingCapacity: true) }
@@ -168,6 +189,15 @@ actor VideoAnalysisService {
                 let videoFraction = min(1, max(0, frameEnd / duration))
                 if processedFrames == 1 || now - lastProgressUpdate >= 0.5 {
                     lastProgressUpdate = now
+                    if let measuredFPS = recentFPS(at: now, processedFrames: processedFrames) {
+                        lastKnownFPS = measuredFPS
+                    }
+                    if let measuredVideoRate = recentVideoSecondsPerSecond(
+                        at: now, videoTime: min(duration, max(0, frameEnd)),
+                        isBackground: execution?.isBackground ?? false
+                    ) {
+                        lastKnownVideoRate = measuredVideoRate
+                    }
                     let performance = AnalysisPerformance(
                         processedFrames: processedFrames,
                         elapsedSeconds: now - processingStart,
@@ -175,7 +205,8 @@ actor VideoAnalysisService {
                         detectedGoals: detectedGoals,
                         backgroundFrames: backgroundFrames,
                         processedVideoTime: min(duration, max(0, frameEnd)), totalVideoDuration: duration,
-                        recentFramesPerSecond: recentFPS(at: now, processedFrames: processedFrames)
+                        recentFramesPerSecond: lastKnownFPS,
+                        recentVideoSecondsPerSecond: lastKnownVideoRate
                     )
                     await progress(
                         0.04 + 0.92 * videoFraction,
@@ -196,12 +227,20 @@ actor VideoAnalysisService {
         guard processedFrames > 0 else { throw VideoAnalysisError.unreadableVideo }
 
         let finishedAt = ProcessInfo.processInfo.systemUptime
-        let rollingFPS = recentFPS(at: finishedAt, processedFrames: processedFrames)
+        if let measuredFPS = recentFPS(at: finishedAt, processedFrames: processedFrames) {
+            lastKnownFPS = measuredFPS
+        }
+        if let measuredVideoRate = recentVideoSecondsPerSecond(
+            at: finishedAt, videoTime: duration, isBackground: execution?.isBackground ?? false
+        ) {
+            lastKnownVideoRate = measuredVideoRate
+        }
         let performance = AnalysisPerformance(
             processedFrames: processedFrames,
             elapsedSeconds: finishedAt - processingStart,
             videoFraction: 1, totalFrames: processedFrames, detectedGoals: detectedGoals, backgroundFrames: backgroundFrames,
-            processedVideoTime: duration, totalVideoDuration: duration, recentFramesPerSecond: rollingFPS
+            processedVideoTime: duration, totalVideoDuration: duration,
+            recentFramesPerSecond: lastKnownFPS, recentVideoSecondsPerSecond: lastKnownVideoRate
         )
         let scan = CompletedScan(identity: identity, duration: duration,
             scores: scores, highestConfidence: highestConfidence, performance: performance, metadata: metadata)

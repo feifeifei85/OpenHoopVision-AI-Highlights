@@ -13,6 +13,7 @@ struct ReviewView: View {
     @State private var sort: HighlightSort = .timeAscending
     @State private var player = AVPlayer()
     @State private var activeCandidateID: UUID?
+    @State private var highlightedCandidateID: UUID?
     @State private var isPlayerPlaying = false
     @State private var playbackTask: Task<Void, Never>?
     @State private var pendingAutoplay = false
@@ -139,7 +140,10 @@ struct ReviewView: View {
                             .background(.black.opacity(0.68), in: Capsule())
                             .allowsHitTesting(false)
                         Spacer()
-                        Button { configurePlayback(project: project, candidate: nil, autoplay: true) } label: {
+                        Button {
+                            highlightedCandidateID = nil
+                            configurePlayback(project: project, candidate: nil, autoplay: true)
+                        } label: {
                             Label(String(localized: "Play Original", bundle: AppLanguage.current.bundle), systemImage: "play.rectangle")
                                 .font(.system(size: 10, weight: .semibold))
                                 .padding(.horizontal, 10).padding(.vertical, 8)
@@ -267,10 +271,12 @@ struct ReviewView: View {
     private func candidateRow(_ candidate: ShotCandidate, project: HighlightProject, number: Int, allowsThumbnails: Bool) -> some View {
         let range = project.clipRange(for: candidate)
         let uncertain = isUncertain(candidate)
+        let isHighlighted = highlightedCandidateID == candidate.id
         let isPlaying = activeCandidateID == candidate.id && isPlayerPlaying
         return HStack(spacing: 10) {
             Button {
                 guard revealedClipRow == nil else { revealedClipRow = nil; return }
+                highlightedCandidateID = candidate.id
                 if activeCandidateID == candidate.id,
                    isPlayerPlaying || pendingAutoplay {
                     playbackTask?.cancel()
@@ -333,10 +339,10 @@ struct ReviewView: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(isPlaying ? Color.hoopOrange.opacity(0.11) : (candidate.isSelected ? Color.hoopMint.opacity(0.06) : Color.hoopPanel), in: RoundedRectangle(cornerRadius: 16))
+        .background(isHighlighted ? Color.hoopOrange.opacity(0.11) : (candidate.isSelected ? Color.hoopMint.opacity(0.06) : Color.hoopPanel), in: RoundedRectangle(cornerRadius: 16))
         .overlay {
             RoundedRectangle(cornerRadius: 16)
-                .stroke(isPlaying ? Color.hoopOrange.opacity(0.9) : (uncertain ? Color.yellow.opacity(0.4) : (candidate.isSelected ? Color.hoopMint.opacity(0.35) : Color.hoopStroke)), lineWidth: isPlaying ? 1.5 : 1)
+                .stroke(isHighlighted ? Color.hoopOrange.opacity(0.9) : (uncertain ? Color.yellow.opacity(0.4) : (candidate.isSelected ? Color.hoopMint.opacity(0.35) : Color.hoopStroke)), lineWidth: isHighlighted ? 1.5 : 1)
         }
     }
 
@@ -467,6 +473,7 @@ struct ReviewView: View {
                 activeCandidateID = nil
                 player.currentItem?.forwardPlaybackEndTime = .invalid
             }
+            if highlightedCandidateID == candidate.id { highlightedCandidateID = nil }
         } catch { errorTitle = String(localized: "Unable to Delete Highlight", bundle: AppLanguage.current.bundle); errorMessage = error.localizedDescription }
     }
 

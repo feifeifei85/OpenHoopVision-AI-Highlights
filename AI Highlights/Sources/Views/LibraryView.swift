@@ -183,7 +183,7 @@ private struct LibraryVideoCard: View {
         let job = model.analysisJobs[video.id]
         let canContinue = model.canContinueAnalysis(videoID: video.id)
         let progress = model.analysisProgress[video.id]?.snapshot
-        let performance = progress?.performance ?? job?.performance
+        let performance = job?.status == .running ? progress?.performance : job?.performance
         let isComplete = job?.status == .ready || job?.status == .empty
         let progressFraction = isComplete ? 1 : min(1, max(0, progress?.fraction ?? job?.fraction ?? 0))
         let allowsThumbnailGeneration = !model.hasActiveAnalyses || job?.status.isActive == true
@@ -276,6 +276,7 @@ private struct LibraryVideoCard: View {
 
     private func statusSummary(_ job: VideoAnalysisJob, fraction: Double, performance: AnalysisPerformance?) -> String {
         let isComplete = job.status == .ready || job.status == .empty
+        let showsPerformance = job.status == .running || job.status == .cancelled || job.status == .interrupted
         let percentage = fraction.formatted(.percent.precision(.fractionLength(0)).locale(AppLanguage.current.locale))
         var summary = job.status == .running ? percentage : "\(statusText(job)) · \(percentage)"
         let totalDuration = isComplete ? job.result?.duration ?? video.duration : performance?.totalVideoDuration ?? video.duration
@@ -284,12 +285,12 @@ private struct LibraryVideoCard: View {
             let safeProcessedTime = processedTime.isFinite ? min(max(0, processedTime), totalDuration) : 0
             summary += " · \(safeProcessedTime.highlightDuration) / \(totalDuration.highlightDuration)"
         }
-        if job.status == .running, let framesPerSecond = performance?.framesPerSecond,
+        if showsPerformance, let framesPerSecond = performance?.framesPerSecond,
            framesPerSecond.isFinite, framesPerSecond > 0 {
             summary += " · \(framesPerSecond.formatted(.number.precision(.fractionLength(0)).locale(AppLanguage.current.locale))) FPS"
         }
-        if job.status == .running,
-           let remainingSeconds = performance?.estimatedRemainingSeconds(after: job.accumulatedElapsedSeconds ?? 0),
+        if showsPerformance,
+           let remainingSeconds = performance?.estimatedRemainingSeconds,
            remainingSeconds.isFinite {
             summary += " · \(String(localized: "ETA \(remainingSeconds.highlightDuration)", bundle: AppLanguage.current.bundle))"
         }

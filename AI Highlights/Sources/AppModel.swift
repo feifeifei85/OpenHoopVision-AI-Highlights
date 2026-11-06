@@ -118,6 +118,7 @@ final class AppModel {
         job.forceRescan = forceRescan || previousJob?.forceRescan == true
         job.manualCandidates = previousJob?.manualCandidates
         job.checkpointFileName = checkpointFileName
+        job.performance = canResume ? previousJob?.performance : nil
         job.accumulatedElapsedSeconds = canResume
             ? previousJob?.accumulatedElapsedSeconds ?? previousJob?.performance?.elapsedSeconds ?? 0
             : 0
@@ -128,7 +129,9 @@ final class AppModel {
         analysisJobs[video.id] = job
         let progress = AnalysisJobProgress()
         if previousCheckpoint == checkpointFileName {
-            progress.snapshot = AnalysisJobProgressSnapshot(fraction: job.fraction, message: job.message)
+            progress.snapshot = AnalysisJobProgressSnapshot(
+                fraction: job.fraction, message: job.message, performance: job.performance
+            )
         }
         analysisProgress[video.id] = progress
         pendingAnalyses.append(video.id)
@@ -284,7 +287,11 @@ final class AppModel {
                             do {
                                 try self.repository.appendAnalysisCheckpoint(batch.hits, fileName: checkpointFileName)
                                 checkpointJob.fraction = batch.progressFraction
-                                checkpointJob.performance = batch.performance
+                                if checkpointJob.status == .running {
+                                    var performance = batch.performance
+                                    performance.fillMissingRecentRates(from: checkpointJob.performance)
+                                    checkpointJob.performance = performance
+                                }
                                 checkpointJob.message = String(localized: "Goals detected: \(batch.performance.detectedGoals)", bundle: AppLanguage.current.bundle)
                                 self.analysisJobs[id] = checkpointJob
                                 self.persistAnalyses()
@@ -297,8 +304,11 @@ final class AppModel {
                         progress: { [weak self] fraction, message, performance in
                             guard let self, self.analysisJobs[id]?.status == .running,
                                   let progress = self.analysisProgress[id] else { return }
+                            let previousPerformance = progress.snapshot.performance ?? self.analysisJobs[id]?.performance
+                            var latestPerformance = performance ?? previousPerformance
+                            latestPerformance?.fillMissingRecentRates(from: previousPerformance)
                             progress.snapshot = AnalysisJobProgressSnapshot(
-                                fraction: fraction, message: message, performance: performance
+                                fraction: fraction, message: message, performance: latestPerformance
                             )
                             AnalysisBackgroundController.shared.update(completedJobs: self.completedInBatch,
                                 remainingJobs: self.pendingAnalyses.count + 1, fraction: fraction, message: message)
@@ -400,8 +410,10 @@ final class AppModel {
         if !preserveCheckpoint || job.checkpointFileName == nil {
             job.fraction = progress.snapshot.fraction
             job.message = progress.snapshot.message
-            job.performance = progress.snapshot.performance
         }
+        var performance = progress.snapshot.performance
+        performance?.fillMissingRecentRates(from: job.performance)
+        job.performance = performance ?? job.performance
         if let elapsedSeconds = progress.snapshot.performance?.elapsedSeconds,
            elapsedSeconds.isFinite, elapsedSeconds > 0 {
             job.accumulatedElapsedSeconds = (job.accumulatedElapsedSeconds ?? 0) + elapsedSeconds

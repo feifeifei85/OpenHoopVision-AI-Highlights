@@ -36,7 +36,8 @@ enum VideoAnalysisError: LocalizedError {
 struct AnalysisPerformance: Codable, Sendable {
     let processedFrames: Int
     let elapsedSeconds: TimeInterval
-    let recentFramesPerSecond: Double?
+    var recentFramesPerSecond: Double?
+    var recentVideoSecondsPerSecond: Double?
     let videoFraction: Double
     let totalFrames: Int?
     let detectedGoals: Int
@@ -44,10 +45,11 @@ struct AnalysisPerformance: Codable, Sendable {
     let processedVideoTime: TimeInterval?
     let totalVideoDuration: TimeInterval?
 
-    init(processedFrames: Int, elapsedSeconds: TimeInterval, videoFraction: Double, totalFrames: Int? = nil, detectedGoals: Int = 0, backgroundFrames: Int? = nil, processedVideoTime: TimeInterval? = nil, totalVideoDuration: TimeInterval? = nil, recentFramesPerSecond: Double? = nil) {
+    init(processedFrames: Int, elapsedSeconds: TimeInterval, videoFraction: Double, totalFrames: Int? = nil, detectedGoals: Int = 0, backgroundFrames: Int? = nil, processedVideoTime: TimeInterval? = nil, totalVideoDuration: TimeInterval? = nil, recentFramesPerSecond: Double? = nil, recentVideoSecondsPerSecond: Double? = nil) {
         self.processedFrames = processedFrames
         self.elapsedSeconds = elapsedSeconds
         self.recentFramesPerSecond = recentFramesPerSecond
+        self.recentVideoSecondsPerSecond = recentVideoSecondsPerSecond
         self.videoFraction = videoFraction
         self.totalFrames = totalFrames
         self.detectedGoals = detectedGoals
@@ -56,25 +58,22 @@ struct AnalysisPerformance: Codable, Sendable {
         self.totalVideoDuration = totalVideoDuration
     }
 
-    var averageFramesPerSecond: Double? {
-        guard processedFrames > 0, elapsedSeconds.isFinite, elapsedSeconds >= 0.5 else { return nil }
-        let rate = Double(processedFrames) / elapsedSeconds
-        return rate.isFinite && rate > 0 ? rate : nil
-    }
-
     var framesPerSecond: Double? {
-        if let recentFramesPerSecond, recentFramesPerSecond.isFinite, recentFramesPerSecond > 0 {
-            return recentFramesPerSecond
-        }
-        return averageFramesPerSecond
+        recentFramesPerSecond
     }
 
-    func estimatedRemainingSeconds(after accumulatedElapsedSeconds: TimeInterval = 0) -> TimeInterval? {
-        guard framesPerSecond != nil, videoFraction.isFinite, videoFraction > 0,
-              elapsedSeconds.isFinite, elapsedSeconds >= 0,
-              accumulatedElapsedSeconds.isFinite, accumulatedElapsedSeconds >= 0 else { return nil }
-        let fraction = min(1, videoFraction)
-        let remaining = (accumulatedElapsedSeconds + elapsedSeconds) * (1 - fraction) / fraction
+    mutating func fillMissingRecentRates(from previous: Self?) {
+        recentFramesPerSecond = recentFramesPerSecond ?? previous?.recentFramesPerSecond
+        recentVideoSecondsPerSecond = recentVideoSecondsPerSecond ?? previous?.recentVideoSecondsPerSecond
+    }
+
+    var estimatedRemainingSeconds: TimeInterval? {
+        guard let recentVideoSecondsPerSecond, recentVideoSecondsPerSecond.isFinite,
+              recentVideoSecondsPerSecond > 0,
+              let processedVideoTime, processedVideoTime.isFinite, processedVideoTime >= 0,
+              let totalVideoDuration, totalVideoDuration.isFinite, totalVideoDuration > 0 else { return nil }
+        let remaining = max(0, totalVideoDuration - min(totalVideoDuration, processedVideoTime))
+            / recentVideoSecondsPerSecond
         return remaining.isFinite ? max(0, remaining) : nil
     }
 }
